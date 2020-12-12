@@ -1,11 +1,12 @@
 import numpy as np
 from sklearn.tree import DecisionTreeRegressor
 from scipy.optimize import minimize_scalar
+from timeit import default_timer as timer
 
 
 class RandomForestMSE:
     def __init__(self, n_estimators, max_depth=None, feature_subsample_size=None,
-                 **trees_parameters):
+                **trees_parameters): 
         """
         n_estimators : int
             The number of trees in the forest.
@@ -36,14 +37,30 @@ class RandomForestMSE:
         y_val : numpy ndarray
             Array of size n_val_objects           
         """
-        for _ in range(self.n_estimators):
+        add_data = (not X_val is None) and (not y_val is None)
+        n_est = self.n_estimators
+        if add_data:
+            self.n_estimators = 1
+            start = timer()
+            scores = []
+            times = []
+        for _ in range(n_est):
             dtr = DecisionTreeRegressor(max_depth=self.max_depth, max_features=self.feature_subsample_size,
                                         **self.trees_parameters)
             idx = np.random.choice(list(range(X.shape[0])), X.shape[0], replace=True)
             dtr.fit(X[idx], y[idx])
             self.trees.append(dtr)
+            if add_data:
+                end = timer()
+                delta = end - start
+                times.append(delta)
+                scores.append(rmse(y_val, self.predict(X_val)))
+                self.n_estimators += 1
+        if add_data:
+            return dict([('scores', scores), ('time', times)])
+
         
-    def predict(self, X, n_estimators=None):
+    def predict(self, X):
         """
         X : numpy ndarray
             Array of size n_objects,    n_features
@@ -53,13 +70,11 @@ class RandomForestMSE:
         y : numpy ndarray
             Array of size n_objects
         """
-        if n_estimators is None:
-            n_estimators = self.n_estimators
         ans = np.zeros(X.shape[0])
-        for i in range(n_estimators):
+        for i in range(self.n_estimators):
             ans += self.trees[i].predict(X)
 
-        return ans / n_estimators
+        return ans / self.n_estimators
 
 
 class GradientBoostingMSE:
@@ -93,20 +108,35 @@ class GradientBoostingMSE:
         y : numpy ndarray
             Array of size n_objects
         """
+        add_data = (not X_val is None) and (not y_val is None)
+        n_est = self.n_estimators
+        if add_data:
+            self.n_estimators = 1
+            start = timer()
+            scores = []
+            times = []
         ans = np.zeros(X.shape[0])
         if self.feature_subsample_size is None:
-            self.feature_subsample_size = np.ceil(2/3 * X.shape[1])
-
-        for _ in range(self.n_estimators):
+            self.feature_subsample_size = 'sqrt'
+        
+        for _ in range(n_est):
             dtr = DecisionTreeRegressor(max_depth=self.max_depth, max_features=self.feature_subsample_size,
                                         **self.trees_parameters)
             dtr.fit(X, 2 * (ans - y) / X.shape[0])
             preds = dtr.predict(X)
-            self.gamma.append(minimize_scalar(lambda x: ((y - ans + x * preds) ** 2).mean().x))
+            self.gamma.append(minimize_scalar(lambda x: mse(y, ans + x * preds)).x)
             self.trees.append(dtr)
             ans += self.lr * self.gamma[-1] * preds
+            if add_data:
+                end = timer()
+                delta = end - start
+                times.append(delta)
+                scores.append(rmse(y_val, self.predict(X_val)))
+                self.n_estimators += 1
+        if add_data:
+            return dict([('scores', scores), ('time', times)])
 
-    def predict(self, X, n_estimators=None):
+    def predict(self, X):
         """
         X : numpy ndarray
             Array of size n_objects, n_features
@@ -116,9 +146,13 @@ class GradientBoostingMSE:
         y : numpy ndarray
             Array of size n_objects
         """
-        if n_estimators is None:
-            n_estimators = self.n_estimators
         ans = np.zeros(X.shape[0])
-        for i in range(n_estimators):
+        for i in range(self.n_estimators):
             ans += self.gamma[i] * self.lr * self.trees[i].predict(X)
         return ans
+    
+def mse(y, ans):
+    return ((y - ans) ** 2).mean()
+
+def rmse(y, ans):
+    return np.sqrt(mse(y, ans))
