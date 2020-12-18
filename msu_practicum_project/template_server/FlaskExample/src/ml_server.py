@@ -6,17 +6,21 @@ from flask_wtf import FlaskForm
 from flask_bootstrap import Bootstrap
 from flask import Flask, request, url_for
 from flask import render_template, redirect
+from flask_uploads import configure_uploads, UploadSet, UploadConfiguration
 
 from wtforms.validators import DataRequired
-from wtforms import StringField, SubmitField
-
+from wtforms import StringField, SubmitField, FileField, validators
 
 app = Flask(__name__, template_folder='html')
 app.config['BOOTSTRAP_SERVE_LOCAL'] = True
 app.config['SECRET_KEY'] = 'hello'
 data_path = './../data'
+app.config['UPLOADS_DEFAULT_DEST'] = data_path
 Bootstrap(app)
 messages = []
+datasets_data = UploadSet('datasets', ('csv'))
+
+configure_uploads(app, datasets_data)
 
 
 class Message:
@@ -35,6 +39,18 @@ class Response(FlaskForm):
     submit = SubmitField('Try Again')
 
 
+class Data(FlaskForm):
+    data = SubmitField('Датасеты')
+
+
+class ModelForm(FlaskForm):
+    models = SubmitField('Модели')
+
+
+class AddData(FlaskForm):
+    add_data = FileField('Добавить датасет')
+
+
 def score_text(text):
     try:
         model = pickle.load(open(os.path.join(data_path, "logreg.pkl"), "rb"))
@@ -49,10 +65,37 @@ def score_text(text):
     return score, sentiment
 
 
-@app.route('/')
-@app.route('/index')
+@app.route('/', methods=['GET', 'POST'])
+@app.route('/index', methods=['GET', 'POST'])
 def index():
-    return render_template('index.html')
+    data = Data()
+    mdls = ModelForm()
+
+    if data.validate_on_submit():
+        return redirect(url_for('datasets'))
+    if mdls.validate_on_submit():
+        return redirect(url_for('models'))
+    return render_template('index.html', data=data, mdls=mdls)
+
+
+@app.route('/datasets', methods=['GET', 'POST'])
+def datasets():
+    mdls = ModelForm()
+    message = Message()
+    form = AddData()
+    try:
+        if form.validate_on_submit():
+            filename = datasets_data.save(form.add_data.data)
+            message.header = filename
+            message.text = filename
+            messages.append(message)
+        if mdls.validate_on_submit():
+            return redirect(url_for('models'))
+
+        return render_template('datasets.html', form=form, messages=messages, mdls=mdls)
+    except Exception as exc:
+        app.logger.info('Exception: {0}'.format(exc))
+    return redirect(url_for('datasets'))
 
 
 @app.route('/index_js')
