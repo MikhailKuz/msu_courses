@@ -2,6 +2,9 @@ import os
 import pickle
 import csv
 import itertools
+import pandas as pd
+from time import localtime, strftime
+import sys
 
 from collections import namedtuple
 from flask_wtf import FlaskForm
@@ -11,21 +14,26 @@ from flask import render_template, redirect
 from flask_uploads import configure_uploads, UploadSet, UploadConfiguration
 
 from wtforms.validators import DataRequired
-from wtforms import StringField, SubmitField, validators, SelectMultipleField, IntegerField
+from wtforms import StringField, SubmitField, validators, SelectMultipleField, IntegerField, DecimalField
 from flask_wtf.file import FileField, FileAllowed, FileRequired
 from pathvalidate import ValidationError, validate_filename
+
+sys.path.insert(1, './../../../realization/')
+import ensembles
 
 app = Flask(__name__, template_folder='html')
 app.config['BOOTSTRAP_SERVE_LOCAL'] = True
 app.config['SECRET_KEY'] = 'hello'
 data_path = './../data/'
-datasets_path = data_path +'datasets/'
+datasets_path = data_path + 'datasets/'
 models_path = data_path + 'models/'
 app.config['UPLOADS_DEFAULT_DEST'] = data_path
 datasets_data = UploadSet('datasets', ('csv'))
 Bootstrap(app)
 data_sets = os.listdir(datasets_path)
-model_names = os.listdir(models_path)
+model_names = [st[:st.rfind('.')] for st in os.listdir(models_path)]
+errors = []
+legend = ['feature subsample size in [-1, 0]  ->  feature_subsample_size = max columns']
 
 configure_uploads(app, datasets_data)
 
@@ -35,6 +43,26 @@ def check_filename(form, field):
         validate_filename(field.data)
     except ValidationError as e:
         raise ValidationError('Wrong filename')
+
+
+def check_feature_subsample_size(form, field):
+    dataset_name = data_sets[form.data.data[0]]
+    dt = pd.read_csv(datasets_path + dataset_name)
+    if len(dt.columns) <= form.feature_subsample_size.data \
+            or field.data < -1 or field.data == 0:
+        del dt
+        raise ValidationError('Wrong feature_subsample_size')
+    del dt
+
+
+def check_y(form, field):
+    dataset_name = data_sets[form.data.data[0]]
+    dt = pd.read_csv(datasets_path + dataset_name)
+    if len(dt.columns) < form.feature_subsample_size.data \
+            or field.data < 0:
+        del dt
+        raise ValidationError('Wrong y')
+    del dt
 
 
 class Message:
@@ -88,20 +116,55 @@ class Rf(FlaskForm):
                        default='model_' + str(len(model_names)))
     data = SelectMultipleField('Датасет', validators=[DataRequired()], coerce=int)
 
-    n_estimators = IntegerField('n_estimators',
+    y = IntegerField('Номер столбца целевой переменной (начинаются от 0)',
+                     default=0,
+                     validators=[check_y])
+
+    n_estimators = IntegerField('Количество деревьев',
                                 default=100,
                                 validators=[validators.NumberRange(1,
                                                                    None,
-                                                                   'Wrong n_estimators')])
-    max_depth = IntegerField('max_depth', default=-1,
+                                                                   'Wrong number: must be >= 1')])
+    max_depth = IntegerField('Максимальная глубина дерева (-1 == max depth)', default=-1,
                              validators=[validators.NumberRange(-1,
                                                                 None,
-                                                                'Wrong max_depth')])
+                                                                'Wrong number: must be >= -1')])
 
-    feature_subsample_size = IntegerField('feature_subsample_size', default=-1,
+    feature_subsample_size = IntegerField('Мощность множества переборных признаков в узле (-1 == max columns)',
+                                          default=-1,
+                                          validators=[check_feature_subsample_size])
+    fit = SubmitField('Обучить модель')
+
+
+class Gb(FlaskForm):
+    name = StringField('Название модели',
+                       [validators.required(), check_filename, validators.length(max=256)],
+                       default='model_' + str(len(model_names)))
+    data = SelectMultipleField('Датасет', validators=[DataRequired()], coerce=int)
+
+    y = IntegerField('Номер столбца целевой переменной (начинаются от 0)',
+                     default=0,
+                     validators=[check_y])
+
+    n_estimators = IntegerField('Количество деревьев',
+                                default=100,
+                                validators=[validators.NumberRange(1,
+                                                                   None,
+                                                                   'Wrong number: must be >= 1')])
+    learning_rate = DecimalField('Шаг обучения',
+                                 default=0.1,
+                                 validators=[validators.NumberRange(0,
+                                                                    None,
+                                                                    'Wrong number: must be >= 0')],
+                                 places=None)
+    max_depth = IntegerField('Максимальная глубина дерева (-1 == max depth)', default=-1,
                              validators=[validators.NumberRange(-1,
                                                                 None,
-                                                                'Wrong  feature_subsample_size')])
+                                                                'Wrong number: must be >= -1')])
+
+    feature_subsample_size = IntegerField('Мощность множества переборных признаков в узле (-1 == max columns)',
+                                          default=-1,
+                                          validators=[check_feature_subsample_size])
     fit = SubmitField('Обучить модель')
 
 
@@ -152,6 +215,7 @@ def datasets():
 def models():
     data = Data()
     model_func = ModelFunc()
+    errors = []
     try:
         if model_func.add_model.data and model_func.validate():
             return redirect(url_for('addmodel'))
@@ -165,7 +229,6 @@ def models():
         if data.data.data and data.validate():
             return redirect(url_for('datasets'))
 
-
         return render_template('models.html', data=data, model_func=model_func, model_names=model_names)
     except Exception as exc:
         app.logger.info('Exception: {0}'.format(exc))
@@ -178,6 +241,7 @@ def addmodel():
     addmodel = AddModel()
 
     if addmodel.rf.data and addmodel.validate():
+        errors.clear()
         return redirect(url_for('rf'))
 
     if addmodel.gr.data and addmodel.validate():
@@ -196,24 +260,118 @@ def addmodel():
 def rf():
     menu = Menu()
     r_f = Rf()
-    r_f.data.choices = [(ind, data_sets[ind]) for ind in range(len(data_sets))]
+    r_f.data.choices = [(ind, data_sets[ind]) for ind in range(len(data_sets) - 1, -1, -1)]
 
-    if r_f.fit.data and r_f.validate():
-        print(r_f.data.data, )
-        reader1, reader2 = itertools.tee(csv.reader(datasets_path + data_sets[r_f.data.data[0]],
-                                                    delimiter=','))
-        ncolumns = len(next(reader1))
-        print(ncolumns)
-        del reader1, reader2
+    try:
+        # if not r_f.validate():
+        #     return render_template('rf.html', r_f=r_f, menu=menu, errors=errors)
+
+        if r_f.fit.data and r_f.validate():
+            dataset_name = data_sets[r_f.data.data[0]]
+            dt = pd.read_csv(datasets_path + dataset_name)
+            name = r_f.name.data
+            y_name = dt.columns[r_f.y.data]
+            n_estimators = r_f.n_estimators.data
+            max_depth = r_f.max_depth.data
+            feature_subsample_size = r_f.feature_subsample_size.data
+            X, y = dt.drop(columns=[y_name]).values, dt[y_name].values
+            if max_depth == -1:
+                max_depth = None
+            if feature_subsample_size == -1:
+                feature_subsample_size = None
+
+            rf_model = ensembles.RandomForestMSE(n_estimators, max_depth, feature_subsample_size)
+            try:
+                info = rf_model.fit(X, y, X, y)
+            except Exception as e:
+                errors.append(('Wrong dataset format', strftime("%Y-%m-%d %H:%M:%S", localtime())))
+                app.logger.info('Exception: {0}'.format(e))
+                return render_template('rf.html', r_f=r_f, menu=menu, errors=errors)
+            finally:
+                del dt
+            allinfo = {
+                'training dataset': dataset_name,
+                'params': {
+                    'algorith': 'random forest',
+                    r_f.n_estimators.label: n_estimators,
+                    r_f.max_depth.label: max_depth,
+                    r_f.feature_subsample_size.label: feature_subsample_size
+                },
+                'loss info': info
+            }
+            pickle.dump(allinfo, open(os.path.join(data_path, 'info_models', name + '.pkl'), 'wb'))
+            pickle.dump(rf_model, open(os.path.join(data_path, 'models', name + '.pkl'), 'wb'))
+            model_names.append(name)
+            return redirect(url_for('models'))
+
+        # if menu.data.data and menu.validate():        # срабатывает при нажатии на r_f.fit
+        #     return redirect(url_for('datasets'))
+        #
+        # if menu.models.data and menu.validate():
+        #     return redirect(url_for('models'))
+    except Exception as exc:
+        app.logger.info('Exception: {0}'.format(exc))
+    return render_template('rf.html', r_f=r_f, menu=menu, errors=errors)
 
 
-    if menu.data.data and menu.validate():
-        return redirect(url_for('datasets'))
+@app.route('/grad', methods=['GET', 'POST'])
+def grad():
+    menu = Menu()
+    g_d = Gb()
+    g_d.data.choices = [(ind, data_sets[ind]) for ind in range(len(data_sets) - 1, -1, -1)]
 
-    if menu.models.data and menu.validate():
-        return redirect(url_for('models'))
+    try:
+        # if not r_f.validate():
+        #     return render_template('rf.html', r_f=r_f, menu=menu, errors=errors)
 
-    return render_template('rf.html', r_f=r_f, menu=menu)
+        if g_d.fit.data and g_d.validate():
+            dataset_name = data_sets[g_d.data.data[0]]
+            dt = pd.read_csv(datasets_path + dataset_name)
+            name = g_d.name.data
+            y_name = dt.columns[g_d.y.data]
+            n_estimators = g_d.n_estimators.data
+            learning_rate = float(g_d.learning_rate.data)
+            max_depth = g_d.max_depth.data
+            feature_subsample_size = g_d.feature_subsample_size.data
+            X, y = dt.drop(columns=[y_name]).values, dt[y_name].values
+            if max_depth == -1:
+                max_depth = None
+            if feature_subsample_size == -1:
+                feature_subsample_size = None
+
+            gd_model = ensembles.GradientBoostingMSE(n_estimators, learning_rate, max_depth, feature_subsample_size)
+            try:
+                info = gd_model.fit(X, y, X, y)
+            except Exception as e:
+                errors.append(('Wrong dataset format', strftime("%Y-%m-%d %H:%M:%S", localtime())))
+                app.logger.info('Exception: {0}'.format(e))
+                return render_template('grad.html', r_f=g_d, menu=menu, errors=errors)
+            finally:
+                del dt
+            allinfo = {
+                'training dataset': dataset_name,
+                'params': {
+                    'algorith': 'gradient boosting',
+                    g_d.n_estimators.label: n_estimators,
+                    g_d.learning_rate.label: learning_rate,
+                    g_d.max_depth.label: max_depth,
+                    g_d.feature_subsample_size.label: feature_subsample_size
+                },
+                'loss info': info
+            }
+            pickle.dump(allinfo, open(os.path.join(data_path, 'info_models', name + '.pkl'), 'wb'))
+            pickle.dump(gd_model, open(os.path.join(data_path, 'models', name + '.pkl'), 'wb'))
+            model_names.append(name)
+            return redirect(url_for('models'))
+
+        # if menu.data.data and menu.validate():        # срабатывает при нажатии на r_f.fit
+        #     return redirect(url_for('datasets'))
+        #
+        # if menu.models.data and menu.validate():
+        #     return redirect(url_for('models'))
+    except Exception as exc:
+        app.logger.info('Exception: {0}'.format(exc))
+    return render_template('grad.html', r_f=g_d, menu=menu, errors=errors)
 
 
 @app.route('/clear_messages', methods=['POST'])

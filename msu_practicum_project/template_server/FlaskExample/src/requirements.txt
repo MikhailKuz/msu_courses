@@ -5,3 +5,6 @@ scikit-learn
 wtforms
 flask_wtf
 flask_bootstrap
+pathvalidate
+pandas
+datetime
