@@ -298,15 +298,15 @@ def addmodel():
 @app.route('/rf', methods=['GET', 'POST'])
 def rf():
     menu = Menu()
-    r_f = Rf()
-    r_f.data.choices = [(ind, data_sets[ind]) for ind in range(len(data_sets) - 1, -1, -1)]
+    r_f = RfForm()
+    r_f.data.choices = [(ind, data_sets[ind]) for ind in range(len(data_sets))]
 
     try:
         if r_f.fit.data:
             if not r_f.validate():
                 return render_template('rf.html', r_f=r_f, menu=menu, errors=errors)
             dataset_name = data_sets[r_f.data.data[0]]
-            dt = pd.read_csv(datasets_path + dataset_name)
+            dt = pd.read_csv(os.path.join(datasets_path, dataset_name))
             name = r_f.name.data
             y_name = dt.columns[r_f.y.data]
             n_estimators = r_f.n_estimators.data
@@ -337,7 +337,7 @@ def rf():
                 },
                 'loss info': info
             }
-            pickle.dump(allinfo, open(os.path.join(data_path, 'info_models', name + '.pkl'), 'wb'))
+            json.dump(allinfo, open(os.path.join(data_path, 'info_models', name + '.json'), 'w'), indent=4)
             pickle.dump(rf_model, open(os.path.join(data_path, 'models', name + '.pkl'), 'wb'))
             model_names.append(name)
             return redirect(url_for('models'))
@@ -396,7 +396,7 @@ def grad():
                 },
                 'loss info': info
             }
-            pickle.dump(allinfo, open(os.path.join(data_path, 'info_models', name + '.pkl'), 'wb'))
+            json.dump(allinfo, open(os.path.join(data_path, 'info_models', name + '.json'), 'w'), indent=4)
             pickle.dump(gd_model, open(os.path.join(data_path, 'models', name + '.pkl'), 'wb'))
             model_names.append(name)
             return redirect(url_for('models'))
