@@ -263,10 +263,9 @@ def rf():
     r_f.data.choices = [(ind, data_sets[ind]) for ind in range(len(data_sets) - 1, -1, -1)]
 
     try:
-        # if not r_f.validate():
-        #     return render_template('rf.html', r_f=r_f, menu=menu, errors=errors)
-
-        if r_f.fit.data and r_f.validate():
+        if r_f.fit.data:
+            if not r_f.validate():
+                return render_template('rf.html', r_f=r_f, menu=menu, errors=errors)
             dataset_name = data_sets[r_f.data.data[0]]
             dt = pd.read_csv(datasets_path + dataset_name)
             name = r_f.name.data
@@ -304,11 +303,11 @@ def rf():
             model_names.append(name)
             return redirect(url_for('models'))
 
-        # if menu.data.data and menu.validate():        # срабатывает при нажатии на r_f.fit
-        #     return redirect(url_for('datasets'))
-        #
-        # if menu.models.data and menu.validate():
-        #     return redirect(url_for('models'))
+        if menu.data.data and menu.validate():
+            return redirect(url_for('datasets'))
+
+        if menu.models.data and menu.validate():
+            return redirect(url_for('models'))
     except Exception as exc:
         app.logger.info('Exception: {0}'.format(exc))
     return render_template('rf.html', r_f=r_f, menu=menu, errors=errors)
@@ -321,10 +320,9 @@ def grad():
     g_d.data.choices = [(ind, data_sets[ind]) for ind in range(len(data_sets) - 1, -1, -1)]
 
     try:
-        # if not r_f.validate():
-        #     return render_template('rf.html', r_f=r_f, menu=menu, errors=errors)
-
-        if g_d.fit.data and g_d.validate():
+        if g_d.fit.data:
+            if not g_d.validate():
+                return render_template('grad.html', g_d=g_d, menu=menu, errors=errors)
             dataset_name = data_sets[g_d.data.data[0]]
             dt = pd.read_csv(datasets_path + dataset_name)
             name = g_d.name.data
@@ -364,14 +362,14 @@ def grad():
             model_names.append(name)
             return redirect(url_for('models'))
 
-        # if menu.data.data and menu.validate():        # срабатывает при нажатии на r_f.fit
-        #     return redirect(url_for('datasets'))
-        #
-        # if menu.models.data and menu.validate():
-        #     return redirect(url_for('models'))
+        if menu.data.data and menu.validate():
+            return redirect(url_for('datasets'))
+
+        if menu.models.data and menu.validate():
+            return redirect(url_for('models'))
     except Exception as exc:
         app.logger.info('Exception: {0}'.format(exc))
-    return render_template('grad.html', r_f=g_d, menu=menu, errors=errors)
+    return render_template('grad.html', g_d=g_d, menu=menu, errors=errors)
 
 
 @app.route('/clear_messages', methods=['POST'])
