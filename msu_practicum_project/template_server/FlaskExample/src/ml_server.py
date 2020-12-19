@@ -339,7 +339,8 @@ def rf():
             }
             json.dump(allinfo, open(os.path.join(data_path, 'info_models', name + '.json'), 'w'), indent=4)
             pickle.dump(rf_model, open(os.path.join(data_path, 'models', name + '.pkl'), 'wb'))
-            model_names.append(name)
+            if name not in model_names:
+                model_names.append(name)
             return redirect(url_for('models'))
 
         if menu.data.data and menu.validate():
@@ -398,7 +399,8 @@ def grad():
             }
             json.dump(allinfo, open(os.path.join(data_path, 'info_models', name + '.json'), 'w'), indent=4)
             pickle.dump(gd_model, open(os.path.join(data_path, 'models', name + '.pkl'), 'wb'))
-            model_names.append(name)
+            if name not in model_names:
+                model_names.append(name)
             return redirect(url_for('models'))
 
         if menu.data.data and menu.validate():
