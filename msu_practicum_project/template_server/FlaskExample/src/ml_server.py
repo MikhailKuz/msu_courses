@@ -328,12 +328,12 @@ def rf():
             finally:
                 del dt
             allinfo = {
-                'training dataset': dataset_name,
+                'Тренировочный датасет': dataset_name,
                 'params': {
-                    'algorith': 'random forest',
-                    r_f.n_estimators.label: n_estimators,
-                    r_f.max_depth.label: max_depth,
-                    r_f.feature_subsample_size.label: feature_subsample_size
+                    'Алгоритм': 'random forest',
+                    r_f.n_estimators.label.text: n_estimators,
+                    r_f.max_depth.label.text: max_depth,
+                    r_f.feature_subsample_size.label.text: feature_subsample_size
                 },
                 'loss info': info
             }
@@ -356,8 +356,8 @@ def rf():
 @app.route('/grad', methods=['GET', 'POST'])
 def grad():
     menu = Menu()
-    g_d = Gb()
-    g_d.data.choices = [(ind, data_sets[ind]) for ind in range(len(data_sets) - 1, -1, -1)]
+    g_d = GbForm()
+    g_d.data.choices = [(ind, data_sets[ind]) for ind in range(len(data_sets))]
 
     try:
         if g_d.fit.data:
@@ -387,13 +387,13 @@ def grad():
             finally:
                 del dt
             allinfo = {
-                'training dataset': dataset_name,
+                'Тренировочный датасет': dataset_name,
                 'params': {
-                    'algorith': 'gradient boosting',
-                    g_d.n_estimators.label: n_estimators,
-                    g_d.learning_rate.label: learning_rate,
-                    g_d.max_depth.label: max_depth,
-                    g_d.feature_subsample_size.label: feature_subsample_size
+                    'Алгоритм': 'gradient boosting',
+                    g_d.n_estimators.label.text: n_estimators,
+                    g_d.learning_rate.label.text: learning_rate,
+                    g_d.max_depth.label.text: max_depth,
+                    g_d.feature_subsample_size.label.text: feature_subsample_size
                 },
                 'loss info': info
             }
