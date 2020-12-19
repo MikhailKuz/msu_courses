@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="container">
+      {{ wtf.quick_form(menu) }}
+      {{ wtf.quick_form(info) }}
+    {% if js %}
+      <h3>Список параметров</h3>
+      {% for key, value in js.items() %}
+            <div float=right>{{ key + ':' }}&nbsp;&nbsp;&nbsp;       {{ value }}</div>
+      {% endfor %}
+    {% endif %}
+</div>
+
+{% endblock %}

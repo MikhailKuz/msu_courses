@@ -176,7 +176,10 @@ class PredForm(FlaskForm):
     predict = SubmitField('Загрузить ответ')
 
 
-    return score, sentiment
+class InfoForm(FlaskForm):
+    model = SelectMultipleField('Модель', validators=[DataRequired()], coerce=int)
+    download = SubmitField('Загрузить параметры')
+    print_par = SubmitField('Распечатать параметры')
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -226,8 +229,38 @@ def models():
 
         if data.data.data and data.validate():
             return redirect(url_for('datasets'))
+    except Exception as exc:
+        app.logger.info('Exception: {0}'.format(exc))
+    return render_template('models.html', data=data, model_func=model_func, model_names=model_names)
 
-        return render_template('models.html', data=data, model_func=model_func, model_names=model_names)
+
+@app.route('/infomodel', methods=['GET', 'POST'])
+def infomodel():
+    menu = Menu()
+    info = InfoForm()
+    js = {}
+    info.model.choices = [(ind, model_names[ind]) for ind in range(len(model_names))]
+
+    try:
+        if info.download.data:
+            model_name = model_names[info.model.data[0]]
+            info_path = os.path.join(info_model_path, model_name + '.json')
+            return send_file(info_path, as_attachment=True)
+
+        if info.print_par.data:
+            model_name = model_names[info.model.data[0]]
+            info_path = os.path.join(info_model_path, model_name + '.json')
+            js = json.load(open(info_path, "r"))
+            js = flatten(js)
+            scores = js.pop('scores', None)
+            time = js.pop('time', None)
+            return render_template('infomodel.html', menu=menu, info=info, js=js, image=image)
+
+        if menu.data.data and menu.validate():
+            return redirect(url_for('datasets'))
+
+        if menu.models.data and menu.validate():
+            return redirect(url_for('models'))
     except Exception as exc:
         app.logger.info('Exception: {0}'.format(exc))
     return render_template('infomodel.html', menu=menu, info=info, errors=errors)
