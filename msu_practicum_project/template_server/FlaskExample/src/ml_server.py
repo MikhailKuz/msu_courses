@@ -5,12 +5,14 @@ import itertools
 import pandas as pd
 from time import localtime, strftime
 import sys
+import json
+import collections
 
 from collections import namedtuple
 from flask_wtf import FlaskForm
 from flask_bootstrap import Bootstrap
 from flask import Flask, request, url_for, send_file
-from flask import render_template, redirect
+from flask import render_template, redirect, jsonify
 from flask_uploads import configure_uploads, UploadSet, UploadConfiguration
 
 from wtforms.validators import DataRequired
@@ -25,8 +27,9 @@ app = Flask(__name__, template_folder='html')
 app.config['BOOTSTRAP_SERVE_LOCAL'] = True
 app.config['SECRET_KEY'] = 'hello'
 data_path = './../data/'
-datasets_path = data_path + 'datasets/'
-models_path = data_path + 'models/'
+datasets_path = os.path.join(data_path, 'datasets')
+models_path = os.path.join(data_path, 'models')
+info_model_path = os.path.join(data_path, 'info_models')
 app.config['UPLOADS_DEFAULT_DEST'] = data_path
 datasets_data = UploadSet('datasets', ('csv'))
 Bootstrap(app)
@@ -38,6 +41,17 @@ legend = ['feature subsample size in [-1, 0]  ->  feature_subsample_size = max c
 configure_uploads(app, datasets_data)
 
 
+def flatten(d, parent_key='', sep='_'):
+    items = []
+    for k, v in d.items():
+        new_key = k
+        if isinstance(v, collections.MutableMapping):
+            items.extend(flatten(v, new_key).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+
 def check_filename(form, field):
     try:
         validate_filename(field.data)
@@ -47,7 +61,7 @@ def check_filename(form, field):
 
 def check_feature_subsample_size(form, field):
     dataset_name = data_sets[form.data.data[0]]
-    dt = pd.read_csv(datasets_path + dataset_name)
+    dt = pd.read_csv(os.path.join(datasets_path, dataset_name))
     if len(dt.columns) <= form.feature_subsample_size.data \
             or field.data < -1 or field.data == 0:
         del dt
@@ -57,27 +71,12 @@ def check_feature_subsample_size(form, field):
 
 def check_y(form, field):
     dataset_name = data_sets[form.data.data[0]]
-    dt = pd.read_csv(datasets_path + dataset_name)
-    if len(dt.columns) < form.feature_subsample_size.data \
+    dt = pd.read_csv(os.path.join(datasets_path, dataset_name))
+    if len(dt.columns) < form.y.data \
             or field.data < 0:
         del dt
         raise ValidationError('Wrong y')
     del dt
-
-
-class Message:
-    text = ''
-
-
-class TextForm(FlaskForm):
-    text = StringField('Text', validators=[DataRequired()])
-    submit = SubmitField('Get Result')
-
-
-class Response(FlaskForm):
-    score = StringField('Score', validators=[DataRequired()])
-    sentiment = StringField('Sentiment', validators=[DataRequired()])
-    submit = SubmitField('Try Again')
 
 
 class Data(FlaskForm):
@@ -100,7 +99,7 @@ class AddData(FlaskForm):
 
 
 class ModelFunc(FlaskForm):
-    add_model = SubmitField('Добавить модель')
+    add_model = SubmitField('Обучить модель')
     pred_model = SubmitField('Предсказать ответ')
     info_model = SubmitField('Информация о модели')
 
@@ -110,7 +109,7 @@ class AddModel(FlaskForm):
     gr = SubmitField('Gradient Boosting')
 
 
-class Rf(FlaskForm):
+class RfForm(FlaskForm):
     name = StringField('Название модели',
                        [validators.required(), check_filename, validators.length(max=256)],
                        default='model_' + str(len(model_names)))
@@ -136,7 +135,7 @@ class Rf(FlaskForm):
     fit = SubmitField('Обучить модель')
 
 
-class Gb(FlaskForm):
+class GbForm(FlaskForm):
     name = StringField('Название модели',
                        [validators.required(), check_filename, validators.length(max=256)],
                        default='model_' + str(len(model_names)))
@@ -168,16 +167,14 @@ class Gb(FlaskForm):
     fit = SubmitField('Обучить модель')
 
 
-def score_text(text):
-    try:
-        model = pickle.load(open(os.path.join(data_path, "logreg.pkl"), "rb"))
-        tfidf = pickle.load(open(os.path.join(data_path, "tf-idf.pkl"), "rb"))
+class PredForm(FlaskForm):
+    model = SelectMultipleField('Модель', validators=[DataRequired()], coerce=int)
+    data = SelectMultipleField('Датасет', validators=[DataRequired()], coerce=int)
+    y = IntegerField('Номер столбца целевой переменной (начинаются от 0)',
+                     default=0,
+                     validators=[check_y])
+    predict = SubmitField('Загрузить ответ')
 
-        score = model.predict_proba(tfidf.transform([text]))[0][1]
-        sentiment = 'positive' if score > 0.5 else 'negative'
-    except Exception as exc:
-        app.logger.info('Exception: {0}'.format(exc))
-        score, sentiment = 0.0, 'unknown'
 
     return score, sentiment
 
@@ -201,14 +198,15 @@ def datasets():
     try:
         if add_data.add_data.data and add_data.validate():
             filename = datasets_data.save(add_data.add_data.data)
-            data_sets.append(filename)
+            if filename not in data_sets:
+                data_sets.append(filename)
         if mdls.models.data and mdls.validate():
             return redirect(url_for('models'))
 
         return render_template('datasets.html', add_data=add_data, data_sets=data_sets, mdls=mdls)
     except Exception as exc:
         app.logger.info('Exception: {0}'.format(exc))
-    return redirect(url_for('datasets'))
+    return render_template('datasets.html', add_data=add_data, data_sets=data_sets, mdls=mdls)
 
 
 @app.route('/models', methods=['GET', 'POST'])
@@ -232,7 +230,48 @@ def models():
         return render_template('models.html', data=data, model_func=model_func, model_names=model_names)
     except Exception as exc:
         app.logger.info('Exception: {0}'.format(exc))
-    return redirect(url_for('models'))
+    return render_template('infomodel.html', menu=menu, info=info, errors=errors)
+
+
+@app.route('/predmodel', methods=['GET', 'POST'])
+def predmodel():
+    menu = Menu()
+    pred = PredForm()
+    pred.data.choices = [(ind, data_sets[ind]) for ind in range(len(data_sets))]
+    pred.model.choices = [(ind, model_names[ind]) for ind in range(len(model_names))]
+
+    try:
+        if pred.predict.data:
+            if not pred.validate():
+                return render_template('predmodel.html', menu=menu, pred=pred, errors=errors)
+            dataset_name = data_sets[pred.data.data[0]]
+            model_name = model_names[pred.model.data[0]]
+            ans_path = os.path.join(data_path, 'answer.csv')
+            dt = pd.read_csv(os.path.join(datasets_path, dataset_name))
+            y_name = dt.columns[pred.y.data]
+            X = dt.drop(columns=[y_name]).values
+            model = pickle.load(open(os.path.join(models_path, model_name + ".pkl"), "rb"))
+            try:
+                preds = model.predict(X)
+            except Exception as e:
+                errors.append(('Wrong dataset format', strftime("%Y-%m-%d %H:%M:%S", localtime())))
+                app.logger.info('Exception: {0}'.format(e))
+                return render_template('predmodel.html', menu=menu, pred=pred, errors=errors)
+            finally:
+                del dt
+
+            ans = pd.DataFrame(columns=['target'], data=preds, index=list(range(len(preds))))
+            ans.to_csv(ans_path)
+            return send_file(ans_path, as_attachment=True)
+
+        if menu.data.data and menu.validate():
+            return redirect(url_for('datasets'))
+
+        if menu.models.data and menu.validate():
+            return redirect(url_for('models'))
+    except Exception as exc:
+        app.logger.info('Exception: {0}'.format(exc))
+    return render_template('predmodel.html', menu=menu, pred=pred, errors=errors)
 
 
 @app.route('/addmodel', methods=['GET', 'POST'])
@@ -377,50 +416,3 @@ def clear_messages():
     messages.clear()
     return redirect(url_for('prepare_message'))
 
-
-@app.route('/messages', methods=['GET', 'POST'])
-def prepare_message():
-    message = Message()
-
-    if request.method == 'POST':
-        message.header, message.text = request.form['header'], request.form['text']
-        messages.append(message)
-
-        return redirect(url_for('prepare_message'))
-
-    return render_template('messages.html', messages=messages)
-
-
-@app.route('/result', methods=['GET', 'POST'])
-def get_result():
-    try:
-        response_form = Response()
-
-        if response_form.validate_on_submit():
-            return redirect(url_for('get_text_score'))
-
-        score = request.args.get('score')
-        sentiment = request.args.get('sentiment')
-
-        response_form.score.data = score
-        response_form.sentiment.data = sentiment
-
-        return render_template('from_form.html', form=response_form)
-    except Exception as exc:
-        app.logger.info('Exception: {0}'.format(exc))
-
-
-@app.route('/sentiment', methods=['GET', 'POST'])
-def get_text_score():
-    try:
-        text_form = TextForm()
-
-        if text_form.validate_on_submit():
-            app.logger.info('On text: {0}'.format(text_form.text.data))
-            score, sentiment = score_text(text_form.text.data)
-            app.logger.info("Score: {0:.3f}, Sentiment: {1}".format(score, sentiment))
-            text_form.text.data = ''
-            return redirect(url_for('get_result', score=score, sentiment=sentiment))
-        return render_template('from_form.html', form=text_form)
-    except Exception as exc:
-        app.logger.info('Exception: {0}'.format(exc))

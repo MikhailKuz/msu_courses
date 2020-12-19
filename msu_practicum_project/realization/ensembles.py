@@ -40,7 +40,7 @@ class RandomForestMSE:
         add_data = (not X_val is None) and (not y_val is None)
         n_est = self.n_estimators
         if add_data:
-            self.n_estimators = 1
+            self.n_estimators = 0
             start = timer()
             scores = []
             times = []
@@ -51,11 +51,11 @@ class RandomForestMSE:
             dtr.fit(X[idx], y[idx])
             self.trees.append(dtr)
             if add_data:
+                self.n_estimators += 1
                 end = timer()
                 delta = end - start
                 times.append(delta)
                 scores.append(rmse(y_val, self.predict(X_val)))
-                self.n_estimators += 1
         if add_data:
             return dict([('scores', scores), ('time', times)])
 
@@ -111,7 +111,7 @@ class GradientBoostingMSE:
         add_data = (not X_val is None) and (not y_val is None)
         n_est = self.n_estimators
         if add_data:
-            self.n_estimators = 1
+            self.n_estimators = 0
             start = timer()
             scores = []
             times = []
@@ -128,11 +128,11 @@ class GradientBoostingMSE:
             self.trees.append(dtr)
             ans += self.lr * self.gamma[-1] * preds
             if add_data:
+                self.n_estimators += 1
                 end = timer()
                 delta = end - start
                 times.append(delta)
                 scores.append(rmse(y_val, self.predict(X_val)))
-                self.n_estimators += 1
         if add_data:
             return dict([('scores', scores), ('time', times)])
 

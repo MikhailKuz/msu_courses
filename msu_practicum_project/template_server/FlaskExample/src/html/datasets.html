@@ -2,7 +2,6 @@
 {% block content %}
     <div class="container">
       {{ wtf.quick_form(mdls) }}
-    </div>
 
     <form method="POST"  enctype="multipart/form-data">
         {{ add_data.csrf_token }}
@@ -14,4 +13,5 @@
 {% for data_set in data_sets[::-1] %}
     <div>{{ data_set }}&nbsp</div>
 {% endfor %}
+    </div>
 {% endblock %}

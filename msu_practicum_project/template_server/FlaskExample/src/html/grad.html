@@ -4,10 +4,7 @@
 
 <div class="container">
       {{ wtf.quick_form(menu) }}
-</div>
-<div class="container">
       {{ wtf.quick_form(g_d) }}
-</div>
 
 {% if errors %}
       <h3>Список ошибок</h3>
@@ -15,5 +12,5 @@
             <div>{{ error_name }}&nbsp;&nbsp;&nbsp; {{ error_date }}</div>
       {% endfor %}
 {% endif %}
-
+</div>
 {% endblock %}
