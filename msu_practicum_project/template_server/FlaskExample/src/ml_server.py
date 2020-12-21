@@ -7,6 +7,8 @@ from time import localtime, strftime
 import sys
 import json
 import collections
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 from collections import namedtuple
 from flask_wtf import FlaskForm
@@ -19,24 +21,37 @@ from wtforms.validators import DataRequired
 from wtforms import StringField, SubmitField, validators, SelectMultipleField, IntegerField, DecimalField
 from flask_wtf.file import FileField, FileAllowed, FileRequired
 from pathvalidate import ValidationError, validate_filename
+from matplotlib.ticker import MaxNLocator
+
 
 sys.path.insert(1, './../../../realization/')
 import ensembles
 
-app = Flask(__name__, template_folder='html')
+app = Flask(__name__,
+            template_folder='html',
+            static_url_path='',
+            static_folder='graphics')
 app.config['BOOTSTRAP_SERVE_LOCAL'] = True
 app.config['SECRET_KEY'] = 'hello'
 data_path = './../data/'
 datasets_path = os.path.join(data_path, 'datasets')
 models_path = os.path.join(data_path, 'models')
 info_model_path = os.path.join(data_path, 'info_models')
+img_path_s = os.path.join('.', 'graphics', 'plot.jpg')
 app.config['UPLOADS_DEFAULT_DEST'] = data_path
 datasets_data = UploadSet('datasets', ('csv'))
 Bootstrap(app)
 data_sets = os.listdir(datasets_path)
 model_names = [st[:st.rfind('.')] for st in os.listdir(models_path)]
 errors = []
-legend = ['feature subsample size in [-1, 0]  ->  feature_subsample_size = max columns']
+sns.set_context("talk")
+sns.set_style('darkgrid')
+plt.rcParams.update({'font.size': 18})
+plt.rcParams['legend.title_fontsize'] = 'xx-small'
+sns.set_theme('poster')
+title_leg_size = '15'
+font_leg_size = '15'
+img = False
 
 configure_uploads(app, datasets_data)
 
@@ -225,6 +240,8 @@ def models():
             return redirect(url_for('predmodel'))
 
         if model_func.info_model.data and model_func.validate():
+            global img
+            img = False
             return redirect(url_for('infomodel'))
 
         if data.data.data and data.validate():
@@ -236,6 +253,7 @@ def models():
 
 @app.route('/infomodel', methods=['GET', 'POST'])
 def infomodel():
+    global img
     menu = Menu()
     info = InfoForm()
     js = {}
@@ -254,7 +272,33 @@ def infomodel():
             js = flatten(js)
             scores = js.pop('scores', None)
             time = js.pop('time', None)
-            return render_template('infomodel.html', menu=menu, info=info, js=js, image=image)
+
+            h = [dict([('scores', scores), ('time', time)])]
+            lab_v = [js['Алгоритм']]
+
+            n = 0
+            fig, axs = plt.subplots(figsize=(2 * 10, 5), ncols=1, nrows=1)
+            p = []
+            ticks = list(range(1, len(h[0]['scores']) + 1))
+            for history in h:
+                if len(ticks[n:]) > 1:
+                    p.append(axs.plot(ticks[n:], history['scores'][n:], linewidth=5))
+                else:
+                    p.append(axs.plot(ticks[n:], history['scores'][n:], marker='o', markersize=10))
+
+            axs.set_title('Dependence of quality on number of trees')
+            axs.set_ylabel('rmse')
+            axs.set_xlabel('Number of trees')
+            axs.xaxis.set_major_locator(MaxNLocator(integer=True))
+            axs.grid(True)
+
+            leg = axs.legend((pj[0] for pj in p), lab_v)
+            leg.set_title('algorithm')
+            plt.setp(axs.get_legend().get_texts(), fontsize=font_leg_size)
+            plt.setp(axs.get_legend().get_title(), fontsize=title_leg_size)
+            fig.savefig(img_path_s, bbox_inches='tight')
+            img = True
+            return render_template('infomodel.html', menu=menu, info=info, js=js, img=img)
 
         if menu.data.data and menu.validate():
             return redirect(url_for('datasets'))
@@ -263,7 +307,7 @@ def infomodel():
             return redirect(url_for('models'))
     except Exception as exc:
         app.logger.info('Exception: {0}'.format(exc))
-    return render_template('infomodel.html', menu=menu, info=info, errors=errors)
+    return render_template('infomodel.html', menu=menu, info=info, js=js, img=img)
 
 
 @app.route('/predmodel', methods=['GET', 'POST'])

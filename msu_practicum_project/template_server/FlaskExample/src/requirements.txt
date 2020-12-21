@@ -9,3 +9,5 @@ pathvalidate
 pandas
 datetime
 collections
+matplotlib
+seaborn
