@@ -77,18 +77,28 @@ def check_filename(form, field):
 def check_feature_subsample_size(form, field):
     dataset_name = data_sets[form.data.data[0]]
     dt = pd.read_csv(os.path.join(datasets_path, dataset_name))
-    if len(dt.columns) <= form.feature_subsample_size.data \
+    if len(dt.columns) < form.feature_subsample_size.data \
             or field.data < -1 or field.data == 0:
         del dt
         raise ValidationError('Wrong feature_subsample_size')
     del dt
 
 
-def check_y(form, field):
+def check_fit_y(form, field):
     dataset_name = data_sets[form.data.data[0]]
     dt = pd.read_csv(os.path.join(datasets_path, dataset_name))
-    if len(dt.columns) < form.y.data \
+    if len(dt.columns) <= form.y.data \
             or field.data < 0:
+        del dt
+        raise ValidationError('Wrong y')
+    del dt
+
+
+def check_pred_y(form, field):
+    dataset_name = data_sets[form.data.data[0]]
+    dt = pd.read_csv(os.path.join(datasets_path, dataset_name))
+    if len(dt.columns) <= form.y.data \
+            or field.data < -1:
         del dt
         raise ValidationError('Wrong y')
     del dt
@@ -132,7 +142,7 @@ class RfForm(FlaskForm):
 
     y = IntegerField('Номер столбца целевой переменной (начинаются от 0)',
                      default=0,
-                     validators=[check_y])
+                     validators=[check_fit_y])
 
     n_estimators = IntegerField('Количество деревьев',
                                 default=100,
@@ -158,7 +168,7 @@ class GbForm(FlaskForm):
 
     y = IntegerField('Номер столбца целевой переменной (начинаются от 0)',
                      default=0,
-                     validators=[check_y])
+                     validators=[check_fit_y])
 
     n_estimators = IntegerField('Количество деревьев',
                                 default=100,
@@ -185,9 +195,9 @@ class GbForm(FlaskForm):
 class PredForm(FlaskForm):
     model = SelectMultipleField('Модель', validators=[DataRequired()], coerce=int)
     data = SelectMultipleField('Датасет', validators=[DataRequired()], coerce=int)
-    y = IntegerField('Номер столбца целевой переменной (начинаются от 0)',
+    y = IntegerField('Номер столбца целевой переменной (начинаются от 0, -1 == её нет в датасете)',
                      default=0,
-                     validators=[check_y])
+                     validators=[check_pred_y])
     predict = SubmitField('Загрузить ответ')
 
 
@@ -325,8 +335,10 @@ def predmodel():
             model_name = model_names[pred.model.data[0]]
             ans_path = os.path.join(data_path, 'answer.csv')
             dt = pd.read_csv(os.path.join(datasets_path, dataset_name))
-            y_name = dt.columns[pred.y.data]
-            X = dt.drop(columns=[y_name]).values
+            X = dt
+            if pred.y.data != -1:
+                y_name = dt.columns[pred.y.data]
+                X = dt.drop(columns=[y_name]).values
             model = pickle.load(open(os.path.join(models_path, model_name + ".pkl"), "rb"))
             try:
                 preds = model.predict(X)
