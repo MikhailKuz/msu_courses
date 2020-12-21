@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+    <div class="container">
+      {{ wtf.quick_form(mdls) }}
+
+    <form method="POST"  enctype="multipart/form-data">
+        {{ add_data.csrf_token }}
+        {{ add_data.add_data }}
+        <button type="submit">Загрузить датасет</button>
+    </form>
+<h3>Список датасетов</h3>
+
+{% for data_set in data_sets[::-1] %}
+    <h4>{{ data_set }}&nbsp</h4>
+{% endfor %}
+    </div>
+{% endblock %}

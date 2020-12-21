@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+<style>
+   q {
+    quotes: "\00ab" "\00bb";
+   }
+  </style>
+{% block content %}
+
+<div class="container">
+      {{ wtf.quick_form(menu) }}
+      <h3><b>Добро пожаловать!</b></h3>
+      <h4>Выберите опцию <q>Датасеты</q> для добавления датасетов</h4>
+      <h4>Выберите опцию <q>Модели</q> для работы с моделями</h4>
+</div>
+
+{% endblock %}

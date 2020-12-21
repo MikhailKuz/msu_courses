@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+    <div class="container">
+      {{ wtf.quick_form(data) }}
+      {{ wtf.quick_form(model_func) }}
+        <h3>Список моделей</h3>
+        {% for model_name in model_names[::-1] %}
+        <h4>{{ model_name }}&nbsp</h4>
+        {% endfor %}
+    </div>
+
+{% endblock %}
