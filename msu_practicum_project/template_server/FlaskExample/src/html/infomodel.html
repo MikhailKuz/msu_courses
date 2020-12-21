@@ -8,7 +8,7 @@
     {% if js %}
       <h3>Список параметров</h3>
       {% for key, value in js.items() %}
-            <div float=right>{{ key + ':' }}&nbsp;&nbsp;&nbsp;       {{ value }}</div>
+            <h4 float=right>{{ key + ':' }}&nbsp;&nbsp;&nbsp;       {{ value }}</h4>
       {% endfor %}
     {% endif %}
 </div>

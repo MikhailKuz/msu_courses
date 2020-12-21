@@ -9,7 +9,7 @@
 {% if errors %}
       <h3>Список ошибок</h3>
       {% for error_name, error_date in errors[::-1] %}
-            <div>{{ error_name }}&nbsp;&nbsp;&nbsp; {{ error_date }}</div>
+            <h4>{{ error_name }}&nbsp;&nbsp;&nbsp; {{ error_date }}</h4>
       {% endfor %}
 {% endif %}
 </div>
