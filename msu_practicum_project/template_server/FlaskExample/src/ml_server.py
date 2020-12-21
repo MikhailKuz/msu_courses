@@ -136,8 +136,7 @@ class AddModel(FlaskForm):
 
 class RfForm(FlaskForm):
     name = StringField('Название модели',
-                       [validators.required(), check_filename, validators.length(max=256)],
-                       default='model_' + str(len(model_names)))
+                       [validators.required(), check_filename, validators.length(max=256)])
     data = SelectMultipleField('Датасет', validators=[DataRequired()], coerce=int)
 
     y = IntegerField('Номер столбца целевой переменной (начинаются от 0)',
@@ -162,8 +161,7 @@ class RfForm(FlaskForm):
 
 class GbForm(FlaskForm):
     name = StringField('Название модели',
-                       [validators.required(), check_filename, validators.length(max=256)],
-                       default='model_' + str(len(model_names)))
+                       [validators.required(), check_filename, validators.length(max=256)])
     data = SelectMultipleField('Датасет', validators=[DataRequired()], coerce=int)
 
     y = IntegerField('Номер столбца целевой переменной (начинаются от 0)',
@@ -389,6 +387,7 @@ def rf():
     menu = Menu()
     r_f = RfForm()
     r_f.data.choices = [(ind, data_sets[ind]) for ind in range(len(data_sets))]
+    r_f.name.default = 'model_' + str(len(model_names))
 
     try:
         if r_f.fit.data:
@@ -447,6 +446,7 @@ def grad():
     menu = Menu()
     g_d = GbForm()
     g_d.data.choices = [(ind, data_sets[ind]) for ind in range(len(data_sets))]
+    g_d.name.default = 'model_' + str(len(model_names))
 
     try:
         if g_d.fit.data:
