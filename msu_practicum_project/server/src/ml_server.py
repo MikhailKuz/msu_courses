@@ -23,7 +23,6 @@ from flask_wtf.file import FileField, FileAllowed, FileRequired
 from pathvalidate import ValidationError, validate_filename
 from matplotlib.ticker import MaxNLocator
 
-
 sys.path.insert(1, './')
 import ensembles
 
@@ -40,10 +39,14 @@ info_model_path = os.path.join(data_path, 'info_models')
 img_path_s = os.path.join('.', 'graphics', 'plot.jpg')
 app.config['UPLOADS_DEFAULT_DEST'] = data_path
 datasets_data = UploadSet('datasets', ('csv'))
+
 Bootstrap(app)
 data_sets = os.listdir(datasets_path)
 model_names = [st[:st.rfind('.')] for st in os.listdir(models_path)]
 errors = []
+dataset_name_cur = ''
+ncolumns_cur = 0
+
 sns.set_context("talk")
 sns.set_style('darkgrid')
 plt.rcParams.update({'font.size': 18})
@@ -67,6 +70,22 @@ def flatten(d, parent_key='', sep='_'):
     return dict(items)
 
 
+def check_ncolumns(form):
+    global ncolumns_cur
+    global dataset_name_cur
+    dataset_name = data_sets[form.data.data[0]]
+    if dataset_name != dataset_name_cur:
+        dt = pd.read_csv(os.path.join(datasets_path, dataset_name))
+        ncolumns_cur = len(dt.columns)
+        dataset_name_cur = dataset_name
+
+
+def str_to_ints(string):
+    st = [x.strip() for x in string.split(',')]
+    integers = [int(x) for x in st]
+    return integers
+
+
 def check_filename(form, field):
     try:
         validate_filename(field.data)
@@ -75,33 +94,36 @@ def check_filename(form, field):
 
 
 def check_feature_subsample_size(form, field):
-    dataset_name = data_sets[form.data.data[0]]
-    dt = pd.read_csv(os.path.join(datasets_path, dataset_name))
-    if len(dt.columns) < form.feature_subsample_size.data \
-            or field.data <= 0:
-        del dt
+    check_ncolumns(form)
+    if ncolumns_cur < form.feature_subsample_size.data \
+            or field.data < -1 or field.data == 0:
         raise ValidationError('Wrong feature_subsample_size')
-    del dt
 
 
 def check_fit_y(form, field):
-    dataset_name = data_sets[form.data.data[0]]
-    dt = pd.read_csv(os.path.join(datasets_path, dataset_name))
-    if len(dt.columns) <= form.y.data \
+    check_ncolumns(form)
+    if ncolumns_cur <= form.y.data \
             or field.data < 0:
-        del dt
         raise ValidationError('Wrong y')
-    del dt
 
 
 def check_pred_y(form, field):
-    dataset_name = data_sets[form.data.data[0]]
-    dt = pd.read_csv(os.path.join(datasets_path, dataset_name))
-    if len(dt.columns) <= form.y.data \
+    check_ncolumns(form)
+    if ncolumns_cur <= form.y.data \
             or field.data < -1:
-        del dt
         raise ValidationError('Wrong y')
-    del dt
+
+
+def check_drop_col(form, field):
+    check_ncolumns(form)
+    try:
+        integers = str_to_ints(field.data)
+        for integer in integers:
+            if integer >= ncolumns_cur \
+                    or integer < 0:
+                raise Exception
+    except Exception as e:
+        raise ValidationError('Wrong drop columns')
 
 
 class Data(FlaskForm):
@@ -121,6 +143,10 @@ class GeneralPar(FlaskForm):
                        [validators.required(), check_filename, validators.length(max=256)],
                        default='model_' + str(len(model_names)))
     data = SelectMultipleField('Датасет', validators=[DataRequired()], coerce=int)
+
+    drop_col = StringField('Номера столбцов, которые надо убрать (начинаются от 0, через запятую)',
+                           [check_drop_col],
+                           default='')
 
     y = IntegerField('Номер столбца целевой переменной (начинаются от 0)',
                      default=0,
@@ -184,9 +210,9 @@ class GbForm(GeneralPar):
 class PredForm(FlaskForm):
     model = SelectMultipleField('Модель', validators=[DataRequired()], coerce=int)
     data = SelectMultipleField('Датасет', validators=[DataRequired()], coerce=int)
-    y = IntegerField('Номер столбца целевой переменной (начинаются от 0, -1 == её нет в датасете)',
-                     default=0,
-                     validators=[check_pred_y])
+    drop_col = StringField('Номера столбцов, которые надо убрать (начинаются от 0, через запятую)',
+                           [check_drop_col],
+                           default='0')
     predict = SubmitField('Загрузить ответ')
 
 
@@ -228,6 +254,7 @@ def datasets():
 
 @app.route('/models', methods=['GET', 'POST'])
 def models():
+    global errors
     data = Data()
     model_func = ModelFunc()
     errors = []
@@ -324,10 +351,8 @@ def predmodel():
             model_name = model_names[pred.model.data[0]]
             ans_path = os.path.join(data_path, 'answer.csv')
             dt = pd.read_csv(os.path.join(datasets_path, dataset_name))
-            X = dt
-            if pred.y.data != -1:
-                y_name = dt.columns[pred.y.data]
-                X = dt.drop(columns=[y_name]).values
+            drop_col = list(dt.columns[str_to_ints(pred.drop_col.data)])
+            X = dt.drop(columns=drop_col).values
             model = pickle.load(open(os.path.join(models_path, model_name + ".pkl"), "rb"))
             try:
                 preds = model.predict(X)
@@ -390,7 +415,13 @@ def rf():
             n_estimators = r_f.n_estimators.data
             max_depth = r_f.max_depth.data
             feature_subsample_size = r_f.feature_subsample_size.data
-            X, y = dt.drop(columns=[y_name]).values, dt[y_name].values
+            drop_col = list(dt.columns[str_to_ints(r_f.drop_col.data)])
+            if y_name in drop_col:
+                errors.append(('Target variable contains in drop columns set',
+                               strftime("%Y-%m-%d %H:%M:%S", localtime())))
+                del dt
+                return render_template('grad.html', r_f=r_f, menu=menu, errors=errors)
+            X, y = dt.drop(columns=[y_name] + drop_col).values, dt[y_name].values
             if max_depth == -1:
                 max_depth = None
             if feature_subsample_size == -1:
@@ -449,7 +480,13 @@ def grad():
             learning_rate = float(g_d.learning_rate.data)
             max_depth = g_d.max_depth.data
             feature_subsample_size = g_d.feature_subsample_size.data
-            X, y = dt.drop(columns=[y_name]).values, dt[y_name].values
+            drop_col = list(dt.columns[str_to_ints(g_d.drop_col.data)])
+            if y_name in drop_col:
+                errors.append(('Target variable contains in drop columns set',
+                               strftime("%Y-%m-%d %H:%M:%S", localtime())))
+                del dt
+                return render_template('grad.html', g_d=g_d, menu=menu, errors=errors)
+            X, y = dt.drop(columns=[y_name] + drop_col).values, dt[y_name].values
             if max_depth == -1:
                 max_depth = None
             if feature_subsample_size == -1:
