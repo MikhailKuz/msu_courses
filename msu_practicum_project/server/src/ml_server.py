@@ -302,7 +302,7 @@ def infomodel():
             time = js.pop('time', None)
 
             h = [dict([('scores', scores), ('time', time)])]
-            lab_v = [js['Алгоритм']]
+            lab_v = [js['Algorithm']]
 
             n = 0
             fig, axs = plt.subplots(figsize=(2 * 10, 5), ncols=1, nrows=1)
