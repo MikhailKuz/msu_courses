@@ -81,6 +81,8 @@ def check_ncolumns(form):
 
 
 def str_to_ints(string):
+    if string == '':
+        return []
     st = [x.strip() for x in string.split(',')]
     integers = [int(x) for x in st]
     return integers
