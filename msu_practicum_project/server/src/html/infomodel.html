@@ -5,14 +5,14 @@
       {{ wtf.quick_form(menu) }}
       {{ wtf.quick_form(info) }}
     {% if js %}
-      <h3>Список параметров</h3>
+      <h3>Parameter list</h3>
       {% for key, value in js.items() %}
             <h4 float=right>{{ key + ':' }}&nbsp;&nbsp;&nbsp;       {{ value }}</h4>
       {% endfor %}
     {% endif %}
     {% if img  %}
     <h4></h4>
-    <h5><b>Перезагрузите страницу, чтобы график обновился</b></h5>
+    <h5><b>Reload the page for the plot to refresh</b></h5>
     <img src="plot.jpg" width=100%>
     {% endif %}
 </div>

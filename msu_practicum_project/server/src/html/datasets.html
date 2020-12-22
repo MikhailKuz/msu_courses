@@ -6,9 +6,9 @@
     <form method="POST"  enctype="multipart/form-data">
         {{ add_data.csrf_token }}
         {{ add_data.add_data }}
-        <button type="submit">Загрузить датасет</button>
+        <button type="submit">Upload dataset</button>
     </form>
-<h3>Список датасетов</h3>
+<h3>Dataset list</h3>
 
 {% for data_set in data_sets[::-1] %}
     <h4>{{ data_set }}&nbsp</h4>

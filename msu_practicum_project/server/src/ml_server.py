@@ -129,11 +129,11 @@ def check_drop_col(form, field):
 
 
 class Data(FlaskForm):
-    data = SubmitField('Датасеты')
+    data = SubmitField('Datasets')
 
 
 class ModelForm(FlaskForm):
-    models = SubmitField('Модели')
+    models = SubmitField('Models')
 
 
 class Menu(Data, ModelForm):
@@ -141,20 +141,20 @@ class Menu(Data, ModelForm):
 
 
 class GeneralPar(FlaskForm):
-    name = StringField('Название модели',
+    name = StringField("Model's name",
                        [validators.required(), check_filename, validators.length(max=256)],
                        default='model_' + str(len(model_names)))
-    data = SelectMultipleField('Датасет', validators=[DataRequired()], coerce=int)
+    data = SelectMultipleField('Dataset', validators=[DataRequired()], coerce=int)
 
-    drop_col = StringField('Номера столбцов, которые надо убрать (начинаются от 0, через запятую)',
+    drop_col = StringField("Drop column's numbers (begins with 0, comma separated)",
                            [check_drop_col],
                            default='')
 
-    y = IntegerField('Номер столбца целевой переменной (начинаются от 0)',
+    y = IntegerField("Target column's number (begins with 0)",
                      default=0,
                      validators=[check_fit_y])
 
-    n_estimators = IntegerField('Количество деревьев',
+    n_estimators = IntegerField('Number of trees',
                                 default=100,
                                 validators=[validators.NumberRange(1,
                                                                    None,
@@ -162,16 +162,16 @@ class GeneralPar(FlaskForm):
 
 
 class AddData(FlaskForm):
-    add_data = FileField('Добавить датасет', validators=[
+    add_data = FileField('Add dataset', validators=[
         FileRequired(),
         FileAllowed(['csv'], 'csv only!')
     ])
 
 
 class ModelFunc(FlaskForm):
-    add_model = SubmitField('Обучить модель')
-    pred_model = SubmitField('Предсказать ответ')
-    info_model = SubmitField('Информация о модели')
+    add_model = SubmitField('Train model')
+    pred_model = SubmitField('Predict answer')
+    info_model = SubmitField("Model's information")
 
 
 class AddModel(FlaskForm):
@@ -180,48 +180,48 @@ class AddModel(FlaskForm):
 
 
 class RfForm(GeneralPar):
-    max_depth = IntegerField('Максимальная глубина дерева (-1 == max depth)', default=-1,
+    max_depth = IntegerField('Max depth of tree (-1 == max depth)', default=-1,
                              validators=[validators.NumberRange(-1,
                                                                 None,
                                                                 'Wrong number: must be >= -1')])
 
-    feature_subsample_size = IntegerField('Мощность множества переборных признаков в узле (-1 == max columns)',
+    feature_subsample_size = IntegerField('Feature subsample size (-1 == max columns)',
                                           default=-1,
                                           validators=[check_feature_subsample_size])
-    fit = SubmitField('Обучить модель')
+    fit = SubmitField('Train model')
 
 
 class GbForm(GeneralPar):
-    learning_rate = DecimalField('Шаг обучения',
+    learning_rate = DecimalField('Learning rate',
                                  default=0.1,
                                  validators=[validators.NumberRange(0,
                                                                     None,
                                                                     'Wrong number: must be >= 0')],
                                  places=None)
-    max_depth = IntegerField('Максимальная глубина дерева (-1 == max depth)', default=5,
+    max_depth = IntegerField('Max depth of tree (-1 == max depth)', default=5,
                              validators=[validators.NumberRange(-1,
                                                                 None,
                                                                 'Wrong number: must be >= -1')])
 
-    feature_subsample_size = IntegerField('Мощность множества переборных признаков в узле (-1 == max columns)',
+    feature_subsample_size = IntegerField('Feature subsample size (-1 == max columns)',
                                           default=-1,
                                           validators=[check_feature_subsample_size])
-    fit = SubmitField('Обучить модель')
+    fit = SubmitField('Train model')
 
 
 class PredForm(FlaskForm):
-    model = SelectMultipleField('Модель', validators=[DataRequired()], coerce=int)
-    data = SelectMultipleField('Датасет', validators=[DataRequired()], coerce=int)
-    drop_col = StringField('Номера столбцов, которые надо убрать (начинаются от 0, через запятую)',
+    model = SelectMultipleField('Model', validators=[DataRequired()], coerce=int)
+    data = SelectMultipleField('Dataset', validators=[DataRequired()], coerce=int)
+    drop_col = StringField("Drop column's numbers (begins with 0, comma separated",
                            [check_drop_col],
                            default='0')
-    predict = SubmitField('Загрузить ответ')
+    predict = SubmitField('Download answer')
 
 
 class InfoForm(FlaskForm):
-    model = SelectMultipleField('Модель', validators=[DataRequired()], coerce=int)
-    download = SubmitField('Загрузить параметры')
-    print_par = SubmitField('Распечатать параметры')
+    model = SelectMultipleField('Model', validators=[DataRequired()], coerce=int)
+    download = SubmitField('Download parametrs')
+    print_par = SubmitField('Print parametrs')
 
 
 @app.route('/', methods=['GET', 'POST'])
