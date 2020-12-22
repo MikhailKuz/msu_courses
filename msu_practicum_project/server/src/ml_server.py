@@ -439,9 +439,9 @@ def rf():
             finally:
                 del dt
             allinfo = {
-                'Тренировочный датасет': dataset_name,
+                'Training dataset': dataset_name,
                 'params': {
-                    'Алгоритм': 'random forest',
+                    'Algorithm': 'random forest',
                     r_f.n_estimators.label.text: n_estimators,
                     r_f.max_depth.label.text: max_depth,
                     r_f.feature_subsample_size.label.text: feature_subsample_size
@@ -504,9 +504,9 @@ def grad():
             finally:
                 del dt
             allinfo = {
-                'Тренировочный датасет': dataset_name,
+                'Training dataset': dataset_name,
                 'params': {
-                    'Алгоритм': 'gradient boosting',
+                    'Algorithm': 'gradient boosting',
                     g_d.n_estimators.label.text: n_estimators,
                     g_d.learning_rate.label.text: learning_rate,
                     g_d.max_depth.label.text: max_depth,
