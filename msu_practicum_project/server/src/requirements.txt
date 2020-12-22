@@ -8,6 +8,7 @@ flask_bootstrap
 pathvalidate
 pandas
 datetime
-collections
 matplotlib
 seaborn
+flask_uploads
+Werkzeug==0.16.0

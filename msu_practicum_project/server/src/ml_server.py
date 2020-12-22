@@ -24,7 +24,7 @@ from pathvalidate import ValidationError, validate_filename
 from matplotlib.ticker import MaxNLocator
 
 
-sys.path.insert(1, './../../realization/')
+sys.path.insert(1, './')
 import ensembles
 
 app = Flask(__name__,
@@ -78,7 +78,7 @@ def check_feature_subsample_size(form, field):
     dataset_name = data_sets[form.data.data[0]]
     dt = pd.read_csv(os.path.join(datasets_path, dataset_name))
     if len(dt.columns) < form.feature_subsample_size.data \
-            or field.data < -1 or field.data == 0:
+            or field.data <= 0:
         del dt
         raise ValidationError('Wrong feature_subsample_size')
     del dt
@@ -116,6 +116,23 @@ class Menu(Data, ModelForm):
     pass
 
 
+class GeneralPar(FlaskForm):
+    name = StringField('Название модели',
+                       [validators.required(), check_filename, validators.length(max=256)],
+                       default='model_' + str(len(model_names)))
+    data = SelectMultipleField('Датасет', validators=[DataRequired()], coerce=int)
+
+    y = IntegerField('Номер столбца целевой переменной (начинаются от 0)',
+                     default=0,
+                     validators=[check_fit_y])
+
+    n_estimators = IntegerField('Количество деревьев',
+                                default=100,
+                                validators=[validators.NumberRange(1,
+                                                                   None,
+                                                                   'Wrong number: must be >= 1')])
+
+
 class AddData(FlaskForm):
     add_data = FileField('Добавить датасет', validators=[
         FileRequired(),
@@ -134,20 +151,7 @@ class AddModel(FlaskForm):
     gr = SubmitField('Gradient Boosting')
 
 
-class RfForm(FlaskForm):
-    name = StringField('Название модели',
-                       [validators.required(), check_filename, validators.length(max=256)])
-    data = SelectMultipleField('Датасет', validators=[DataRequired()], coerce=int)
-
-    y = IntegerField('Номер столбца целевой переменной (начинаются от 0)',
-                     default=0,
-                     validators=[check_fit_y])
-
-    n_estimators = IntegerField('Количество деревьев',
-                                default=100,
-                                validators=[validators.NumberRange(1,
-                                                                   None,
-                                                                   'Wrong number: must be >= 1')])
+class RfForm(GeneralPar):
     max_depth = IntegerField('Максимальная глубина дерева (-1 == max depth)', default=-1,
                              validators=[validators.NumberRange(-1,
                                                                 None,
@@ -159,27 +163,14 @@ class RfForm(FlaskForm):
     fit = SubmitField('Обучить модель')
 
 
-class GbForm(FlaskForm):
-    name = StringField('Название модели',
-                       [validators.required(), check_filename, validators.length(max=256)])
-    data = SelectMultipleField('Датасет', validators=[DataRequired()], coerce=int)
-
-    y = IntegerField('Номер столбца целевой переменной (начинаются от 0)',
-                     default=0,
-                     validators=[check_fit_y])
-
-    n_estimators = IntegerField('Количество деревьев',
-                                default=100,
-                                validators=[validators.NumberRange(1,
-                                                                   None,
-                                                                   'Wrong number: must be >= 1')])
+class GbForm(GeneralPar):
     learning_rate = DecimalField('Шаг обучения',
                                  default=0.1,
                                  validators=[validators.NumberRange(0,
                                                                     None,
                                                                     'Wrong number: must be >= 0')],
                                  places=None)
-    max_depth = IntegerField('Максимальная глубина дерева (-1 == max depth)', default=-1,
+    max_depth = IntegerField('Максимальная глубина дерева (-1 == max depth)', default=5,
                              validators=[validators.NumberRange(-1,
                                                                 None,
                                                                 'Wrong number: must be >= -1')])
@@ -387,7 +378,6 @@ def rf():
     menu = Menu()
     r_f = RfForm()
     r_f.data.choices = [(ind, data_sets[ind]) for ind in range(len(data_sets))]
-    r_f.name.default = 'model_' + str(len(model_names))
 
     try:
         if r_f.fit.data:
@@ -446,14 +436,13 @@ def grad():
     menu = Menu()
     g_d = GbForm()
     g_d.data.choices = [(ind, data_sets[ind]) for ind in range(len(data_sets))]
-    g_d.name.default = 'model_' + str(len(model_names))
 
     try:
         if g_d.fit.data:
             if not g_d.validate():
                 return render_template('grad.html', g_d=g_d, menu=menu, errors=errors)
             dataset_name = data_sets[g_d.data.data[0]]
-            dt = pd.read_csv(datasets_path + dataset_name)
+            dt = pd.read_csv(os.path.join(datasets_path, dataset_name))
             name = g_d.name.data
             y_name = dt.columns[g_d.y.data]
             n_estimators = g_d.n_estimators.data
@@ -472,7 +461,7 @@ def grad():
             except Exception as e:
                 errors.append(('Wrong dataset format', strftime("%Y-%m-%d %H:%M:%S", localtime())))
                 app.logger.info('Exception: {0}'.format(e))
-                return render_template('grad.html', r_f=g_d, menu=menu, errors=errors)
+                return render_template('grad.html', g_d=g_d, menu=menu, errors=errors)
             finally:
                 del dt
             allinfo = {
@@ -500,10 +489,3 @@ def grad():
     except Exception as exc:
         app.logger.info('Exception: {0}'.format(exc))
     return render_template('grad.html', g_d=g_d, menu=menu, errors=errors)
-
-
-@app.route('/clear_messages', methods=['POST'])
-def clear_messages():
-    messages.clear()
-    return redirect(url_for('prepare_message'))
-
