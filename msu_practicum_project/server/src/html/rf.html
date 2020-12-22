@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="container">
+      {{ wtf.quick_form(menu) }}
+      {{ wtf.quick_form(r_f) }}
+      {% if errors %}
+            <h3>Error list</h3>
+            {% for error_name, error_date in errors[::-1] %}
+                  <div>{{ error_name }}&nbsp;&nbsp;&nbsp; {{ error_date }}</div>
+            {% endfor %}
+      {% endif %}
+</div>
+
+{% endblock %}

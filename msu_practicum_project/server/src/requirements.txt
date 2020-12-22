@@ -1,0 +1,14 @@
+numpy
+scipy
+scikit-learn
+
+wtforms
+flask_wtf
+flask_bootstrap
+pathvalidate
+pandas
+datetime
+matplotlib
+seaborn
+flask_uploads
+Werkzeug==0.16.0
