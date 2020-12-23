@@ -1,7 +1,5 @@
 import os
 import pickle
-import csv
-import itertools
 import pandas as pd
 from time import localtime, strftime
 import sys
@@ -10,7 +8,6 @@ import collections
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from collections import namedtuple
 from flask_wtf import FlaskForm
 from flask_bootstrap import Bootstrap
 from flask import Flask, request, url_for, send_file
@@ -73,7 +70,7 @@ def flatten(d, parent_key='', sep='_'):
 def check_ncolumns(form):
     global ncolumns_cur
     global dataset_name_cur
-    dataset_name = data_sets[form.data.data[0]]
+    dataset_name = data_sets[form.train_data.data[0]]
     if dataset_name != dataset_name_cur:
         dt = pd.read_csv(os.path.join(datasets_path, dataset_name))
         ncolumns_cur = len(dt.columns)
@@ -128,6 +125,88 @@ def check_drop_col(form, field):
         raise ValidationError('Wrong drop columns')
 
 
+def render_fit_form(form, alg='random forest'):
+    menu = Menu()
+    f = form()
+    dt_list = [(ind, data_sets[ind]) for ind in range(len(data_sets))]
+    f.train_data.choices = dt_list
+    f.valid_data.choices = dt_list
+
+    try:
+        if f.fit.data:
+            if not f.validate():
+                return render_template('f.html', f=f, menu=menu, errors=errors)
+            train_dataset_name = data_sets[f.train_data.data[0]]
+            valid_dataset_name = train_dataset_name
+            if len(f.valid_data.data) != 0:
+                valid_dataset_name = data_sets[f.valid_data.data[0]]
+            train_dt = pd.read_csv(os.path.join(datasets_path, train_dataset_name))
+            valid_dt = pd.read_csv(os.path.join(datasets_path, valid_dataset_name))
+            if set(train_dt.columns) != set(valid_dt.columns):
+                errors.append(('Train dataset columns not equal to  valid dataset columns',
+                               strftime("%Y-%m-%d %H:%M:%S", localtime())))
+                del train_dt, valid_dt
+                return render_template('f.html', f=f, menu=menu, errors=errors)
+            name = f.name.data
+            y_name = train_dt.columns[f.y.data]
+            n_estimators = f.n_estimators.data
+            max_depth = f.max_depth.data
+            feature_subsample_size = f.feature_subsample_size.data
+            if alg == 'gradient boosting':
+                learning_rate = float(f.learning_rate.data)
+            drop_col = list(train_dt.columns[str_to_ints(f.drop_col.data)])
+            if y_name in drop_col:
+                errors.append(('Target variable contains in drop columns set',
+                               strftime("%Y-%m-%d %H:%M:%S", localtime())))
+                del train_dt, valid_dt
+                return render_template('f.html', f=f, menu=menu, errors=errors)
+            X_train, y_train = train_dt.drop(columns=[y_name] + drop_col).values, train_dt[y_name].values
+            X_valid, y_valid = valid_dt.drop(columns=[y_name] + drop_col).values, valid_dt[y_name].values
+            if max_depth == -1:
+                max_depth = None
+            if feature_subsample_size == -1:
+                feature_subsample_size = None
+
+            if alg == 'random forest':
+                model_obj = ensembles.RandomForestMSE(n_estimators, max_depth, feature_subsample_size)
+            else:
+                model_obj = ensembles.GradientBoostingMSE(n_estimators, learning_rate, max_depth,
+                                                          feature_subsample_size)
+            try:
+                info = model_obj.fit(X_train, y_train, X_valid, y_valid)
+            except Exception as e:
+                errors.append(('Wrong dataset format', strftime("%Y-%m-%d %H:%M:%S", localtime())))
+                app.logger.info('Exception: {0}'.format(e))
+                return render_template('f.html', f=f, menu=menu, errors=errors)
+            finally:
+                del train_dt, valid_dt
+            allinfo = {
+                'Training dataset': train_dataset_name,
+                'Valid dataset': valid_dataset_name,
+                'params': {
+                    'Algorithm': alg,
+                    f.n_estimators.label.text: n_estimators,
+                    f.max_depth.label.text: max_depth,
+                    f.feature_subsample_size.label.text: feature_subsample_size
+                },
+                'loss info': info
+            }
+            json.dump(allinfo, open(os.path.join(data_path, 'info_models', name + '.json'), 'w'), indent=4)
+            pickle.dump(model_obj, open(os.path.join(data_path, 'models', name + '.pkl'), 'wb'))
+            if name not in model_names:
+                model_names.append(name)
+            return redirect(url_for('models'))
+
+        if menu.data.data and menu.validate():
+            return redirect(url_for('datasets'))
+
+        if menu.models.data and menu.validate():
+            return redirect(url_for('models'))
+    except Exception as exc:
+        app.logger.info('Exception: {0}'.format(exc))
+    return render_template('f.html', f=f, menu=menu, errors=errors)
+
+
 class Data(FlaskForm):
     data = SubmitField('Datasets')
 
@@ -144,16 +223,14 @@ class GeneralPar(FlaskForm):
     name = StringField("Model's name",
                        [validators.required(), check_filename, validators.length(max=256)],
                        default='model_' + str(len(model_names)))
-    data = SelectMultipleField('Dataset', validators=[DataRequired()], coerce=int)
-
+    train_data = SelectMultipleField('Train dataset', validators=[DataRequired()], coerce=int)
+    valid_data = SelectMultipleField('Valid dataset', validators=[], coerce=int)
     drop_col = StringField("Drop column's numbers (begins with 0, comma separated)",
                            [check_drop_col],
                            default='')
-
     y = IntegerField("Target column's number (begins with 0)",
                      default=0,
                      validators=[check_fit_y])
-
     n_estimators = IntegerField('Number of trees',
                                 default=100,
                                 validators=[validators.NumberRange(1,
@@ -402,129 +479,9 @@ def addmodel():
 
 @app.route('/rf', methods=['GET', 'POST'])
 def rf():
-    menu = Menu()
-    r_f = RfForm()
-    r_f.data.choices = [(ind, data_sets[ind]) for ind in range(len(data_sets))]
-
-    try:
-        if r_f.fit.data:
-            if not r_f.validate():
-                return render_template('rf.html', r_f=r_f, menu=menu, errors=errors)
-            dataset_name = data_sets[r_f.data.data[0]]
-            dt = pd.read_csv(os.path.join(datasets_path, dataset_name))
-            name = r_f.name.data
-            y_name = dt.columns[r_f.y.data]
-            n_estimators = r_f.n_estimators.data
-            max_depth = r_f.max_depth.data
-            feature_subsample_size = r_f.feature_subsample_size.data
-            drop_col = list(dt.columns[str_to_ints(r_f.drop_col.data)])
-            if y_name in drop_col:
-                errors.append(('Target variable contains in drop columns set',
-                               strftime("%Y-%m-%d %H:%M:%S", localtime())))
-                del dt
-                return render_template('grad.html', r_f=r_f, menu=menu, errors=errors)
-            X, y = dt.drop(columns=[y_name] + drop_col).values, dt[y_name].values
-            if max_depth == -1:
-                max_depth = None
-            if feature_subsample_size == -1:
-                feature_subsample_size = None
-
-            rf_model = ensembles.RandomForestMSE(n_estimators, max_depth, feature_subsample_size)
-            try:
-                info = rf_model.fit(X, y, X, y)
-            except Exception as e:
-                errors.append(('Wrong dataset format', strftime("%Y-%m-%d %H:%M:%S", localtime())))
-                app.logger.info('Exception: {0}'.format(e))
-                return render_template('rf.html', r_f=r_f, menu=menu, errors=errors)
-            finally:
-                del dt
-            allinfo = {
-                'Training dataset': dataset_name,
-                'params': {
-                    'Algorithm': 'random forest',
-                    r_f.n_estimators.label.text: n_estimators,
-                    r_f.max_depth.label.text: max_depth,
-                    r_f.feature_subsample_size.label.text: feature_subsample_size
-                },
-                'loss info': info
-            }
-            json.dump(allinfo, open(os.path.join(data_path, 'info_models', name + '.json'), 'w'), indent=4)
-            pickle.dump(rf_model, open(os.path.join(data_path, 'models', name + '.pkl'), 'wb'))
-            if name not in model_names:
-                model_names.append(name)
-            return redirect(url_for('models'))
-
-        if menu.data.data and menu.validate():
-            return redirect(url_for('datasets'))
-
-        if menu.models.data and menu.validate():
-            return redirect(url_for('models'))
-    except Exception as exc:
-        app.logger.info('Exception: {0}'.format(exc))
-    return render_template('rf.html', r_f=r_f, menu=menu, errors=errors)
+    return render_fit_form(RfForm, 'random forest')
 
 
 @app.route('/grad', methods=['GET', 'POST'])
 def grad():
-    menu = Menu()
-    g_d = GbForm()
-    g_d.data.choices = [(ind, data_sets[ind]) for ind in range(len(data_sets))]
-
-    try:
-        if g_d.fit.data:
-            if not g_d.validate():
-                return render_template('grad.html', g_d=g_d, menu=menu, errors=errors)
-            dataset_name = data_sets[g_d.data.data[0]]
-            dt = pd.read_csv(os.path.join(datasets_path, dataset_name))
-            name = g_d.name.data
-            y_name = dt.columns[g_d.y.data]
-            n_estimators = g_d.n_estimators.data
-            learning_rate = float(g_d.learning_rate.data)
-            max_depth = g_d.max_depth.data
-            feature_subsample_size = g_d.feature_subsample_size.data
-            drop_col = list(dt.columns[str_to_ints(g_d.drop_col.data)])
-            if y_name in drop_col:
-                errors.append(('Target variable contains in drop columns set',
-                               strftime("%Y-%m-%d %H:%M:%S", localtime())))
-                del dt
-                return render_template('grad.html', g_d=g_d, menu=menu, errors=errors)
-            X, y = dt.drop(columns=[y_name] + drop_col).values, dt[y_name].values
-            if max_depth == -1:
-                max_depth = None
-            if feature_subsample_size == -1:
-                feature_subsample_size = None
-
-            gd_model = ensembles.GradientBoostingMSE(n_estimators, learning_rate, max_depth, feature_subsample_size)
-            try:
-                info = gd_model.fit(X, y, X, y)
-            except Exception as e:
-                errors.append(('Wrong dataset format', strftime("%Y-%m-%d %H:%M:%S", localtime())))
-                app.logger.info('Exception: {0}'.format(e))
-                return render_template('grad.html', g_d=g_d, menu=menu, errors=errors)
-            finally:
-                del dt
-            allinfo = {
-                'Training dataset': dataset_name,
-                'params': {
-                    'Algorithm': 'gradient boosting',
-                    g_d.n_estimators.label.text: n_estimators,
-                    g_d.learning_rate.label.text: learning_rate,
-                    g_d.max_depth.label.text: max_depth,
-                    g_d.feature_subsample_size.label.text: feature_subsample_size
-                },
-                'loss info': info
-            }
-            json.dump(allinfo, open(os.path.join(data_path, 'info_models', name + '.json'), 'w'), indent=4)
-            pickle.dump(gd_model, open(os.path.join(data_path, 'models', name + '.pkl'), 'wb'))
-            if name not in model_names:
-                model_names.append(name)
-            return redirect(url_for('models'))
-
-        if menu.data.data and menu.validate():
-            return redirect(url_for('datasets'))
-
-        if menu.models.data and menu.validate():
-            return redirect(url_for('models'))
-    except Exception as exc:
-        app.logger.info('Exception: {0}'.format(exc))
-    return render_template('grad.html', g_d=g_d, menu=menu, errors=errors)
+    return render_fit_form(GbForm, 'gradient boosting')
