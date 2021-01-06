@@ -30,10 +30,16 @@ app = Flask(__name__,
 app.config['BOOTSTRAP_SERVE_LOCAL'] = True
 app.config['SECRET_KEY'] = 'hello'
 data_path = '../data/'
+
 datasets_path = os.path.join(data_path, 'datasets')
 models_path = os.path.join(data_path, 'models')
 info_model_path = os.path.join(data_path, 'info_models')
 img_path_s = os.path.join('.', 'graphics', 'plot.jpg')
+os.makedirs(datasets_path, exist_ok=True)
+os.makedirs(models_path, exist_ok=True)
+os.makedirs(info_model_path, exist_ok=True)
+os.makedirs(os.path.join('.', 'graphics'), exist_ok=True)
+
 app.config['UPLOADS_DEFAULT_DEST'] = data_path
 datasets_data = UploadSet('datasets', ('csv'))
 
@@ -70,7 +76,14 @@ def flatten(d, parent_key='', sep='_'):
 def check_ncolumns(form):
     global ncolumns_cur
     global dataset_name_cur
-    dataset_name = data_sets[form.train_data.data[0]]
+
+    if form.__contains__('train_data'):
+        dataset_name = data_sets[form.train_data.data[0]]
+    elif form.__contains__('data'):
+        dataset_name = data_sets[form.data.data[0]]
+    else:
+        raise ValidationError('Wrong name of the parametr of the form')
+
     if dataset_name != dataset_name_cur:
         dt = pd.read_csv(os.path.join(datasets_path, dataset_name))
         ncolumns_cur = len(dt.columns)
